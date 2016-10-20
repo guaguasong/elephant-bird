@@ -98,7 +98,7 @@ public final class ProtobufStructObjectInspector extends SettableStructObjectIns
           case MESSAGE:
             elementOI = new ProtobufStructObjectInspector(
                 fieldDescriptor.getMessageType(),
-                builder.newBuilderForField(fieldDescriptor));
+                builder.getFieldBuilder(fieldDescriptor));
             break;
           default:
             throw new RuntimeException("JavaType " + fieldType
@@ -128,7 +128,7 @@ public final class ProtobufStructObjectInspector extends SettableStructObjectIns
       }
     }
   }
-
+  
   @Override
   public Category getCategory() {
     return Category.STRUCT;
@@ -153,15 +153,19 @@ public final class ProtobufStructObjectInspector extends SettableStructObjectIns
 
   @Override
   public Object create() {
-    return builder.build();
+    return builder;
   }
 
   @Override
   public Object setStructFieldData(Object data, StructField field, Object fieldValue) {
-    return ((Message) data)
-        .toBuilder()
-        .setField(descriptor.findFieldByName(field.getFieldName()), fieldValue)
-        .build();
+    Message.Builder builder = (Message.Builder)data;
+    FieldDescriptor fieldDescriptor = descriptor.findFieldByName(field.getFieldName());
+    if (fieldDescriptor.getType() == Type.MESSAGE) {
+      builder.setField(fieldDescriptor, ((Message.Builder)fieldValue).build());
+    } else {
+      builder.setField(fieldDescriptor, fieldValue);
+    }
+    return builder;
   }
 
   @Override
@@ -174,7 +178,7 @@ public final class ProtobufStructObjectInspector extends SettableStructObjectIns
     if (data == null) {
       return null;
     }
-    Message m = (Message) data;
+    Message.Builder m = (Message.Builder) data;
     ProtobufStructField psf = (ProtobufStructField) structField;
     FieldDescriptor fieldDescriptor = psf.getFieldDescriptor();
     Object result = m.getField(fieldDescriptor);
@@ -182,7 +186,10 @@ public final class ProtobufStructObjectInspector extends SettableStructObjectIns
       return ((EnumValueDescriptor)result).getName();
     }
     if (fieldDescriptor.getType() == Type.BYTES && (result instanceof ByteString)) {
-        return ((ByteString)result).toByteArray();
+      return ((ByteString)result).toByteArray();
+    }
+    if (fieldDescriptor.getType() == Type.MESSAGE && !fieldDescriptor.isRepeated()) {
+      result = ((Message)result).toBuilder();
     }
     return result;
   }
