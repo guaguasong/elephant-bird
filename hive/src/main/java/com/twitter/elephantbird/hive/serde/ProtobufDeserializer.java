@@ -45,8 +45,9 @@ public class ProtobufDeserializer implements Deserializer {
           .asSubclass(Message.class);
       protobufConverter = ProtobufConverter.newInstance(protobufClass);
 
+      Message.Builder builder = Protobufs.getMessageBuilder(protobufClass);
       Descriptor descriptor = Protobufs.getMessageDescriptor(protobufClass);
-      objectInspector = new ProtobufStructObjectInspector(descriptor);
+      objectInspector = new ProtobufStructObjectInspector(descriptor, builder);
     } catch (Exception e) {
       throw new SerDeException(e);
     }

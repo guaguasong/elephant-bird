@@ -25,11 +25,24 @@ public final class ProtobufStructObjectInspector extends SettableStructObjectIns
     private ObjectInspector oi = null;
     private String comment = null;
     private FieldDescriptor fieldDescriptor;
+    private Message.Builder builder;
 
     @SuppressWarnings("unchecked")
     public ProtobufStructField(FieldDescriptor fieldDescriptor) {
       this.fieldDescriptor = fieldDescriptor;
       oi = this.createOIForField();
+    }
+
+    @SuppressWarnings("unchecked")
+    public ProtobufStructField(FieldDescriptor fieldDescriptor, Message.Builder builder) {
+      this.fieldDescriptor = fieldDescriptor;
+      this.builder = builder;
+      oi = this.createOIForField();
+    }
+    
+    @Override
+    public int getFieldID() {
+      return 0;
     }
 
     @Override
@@ -83,7 +96,9 @@ public final class ProtobufStructObjectInspector extends SettableStructObjectIns
       } else {
         switch (fieldType) {
           case MESSAGE:
-            elementOI = new ProtobufStructObjectInspector(fieldDescriptor.getMessageType());
+            elementOI = new ProtobufStructObjectInspector(
+                fieldDescriptor.getMessageType(),
+                builder.newBuilderForField(fieldDescriptor));
             break;
           default:
             throw new RuntimeException("JavaType " + fieldType
@@ -99,12 +114,18 @@ public final class ProtobufStructObjectInspector extends SettableStructObjectIns
   }
 
   private Descriptor descriptor;
+  private Message.Builder builder;
   private List<StructField> structFields = Lists.newArrayList();
 
-  ProtobufStructObjectInspector(Descriptor descriptor) {
+  ProtobufStructObjectInspector(Descriptor descriptor, Message.Builder builder) {
     this.descriptor = descriptor;
+    this.builder = builder;
     for (FieldDescriptor fd : descriptor.getFields()) {
-      structFields.add(new ProtobufStructField(fd));
+      if (fd.getJavaType() == JavaType.MESSAGE) {
+        structFields.add(new ProtobufStructField(fd, builder));
+      } else {
+        structFields.add(new ProtobufStructField(fd));
+      }
     }
   }
 
@@ -132,7 +153,7 @@ public final class ProtobufStructObjectInspector extends SettableStructObjectIns
 
   @Override
   public Object create() {
-    return descriptor.toProto().toBuilder().build();
+    return builder.build();
   }
 
   @Override
@@ -168,7 +189,11 @@ public final class ProtobufStructObjectInspector extends SettableStructObjectIns
 
   @Override
   public StructField getStructFieldRef(String fieldName) {
-    return new ProtobufStructField(descriptor.findFieldByName(fieldName));
+    FieldDescriptor fieldDescriptor = descriptor.findFieldByName(fieldName);
+    if (fieldDescriptor.getJavaType() == JavaType.MESSAGE) {
+      return new ProtobufStructField(fieldDescriptor, builder);
+    }
+    return new ProtobufStructField(fieldDescriptor);
   }
 
   @Override
