@@ -1,5 +1,6 @@
 package com.twitter.elephantbird.hive.serde;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import com.google.common.collect.Lists;
@@ -10,6 +11,7 @@ import com.google.protobuf.Descriptors.FieldDescriptor.JavaType;
 import com.google.protobuf.Descriptors.FieldDescriptor.Type;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Message;
+import com.google.protobuf.MessageOrBuilder;
 
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory;
@@ -42,7 +44,7 @@ public final class ProtobufStructObjectInspector extends SettableStructObjectIns
     
     @Override
     public int getFieldID() {
-      return 0;
+      return fieldDescriptor.getIndex();
     }
 
     @Override
@@ -98,7 +100,7 @@ public final class ProtobufStructObjectInspector extends SettableStructObjectIns
           case MESSAGE:
             elementOI = new ProtobufStructObjectInspector(
                 fieldDescriptor.getMessageType(),
-                builder.getFieldBuilder(fieldDescriptor));
+                builder.newBuilderForField(fieldDescriptor));
             break;
           default:
             throw new RuntimeException("JavaType " + fieldType
@@ -153,17 +155,30 @@ public final class ProtobufStructObjectInspector extends SettableStructObjectIns
 
   @Override
   public Object create() {
-    return builder;
+    return builder.build().newBuilderForType();
   }
 
   @Override
   public Object setStructFieldData(Object data, StructField field, Object fieldValue) {
     Message.Builder builder = (Message.Builder)data;
     FieldDescriptor fieldDescriptor = descriptor.findFieldByName(field.getFieldName());
-    if (fieldDescriptor.getType() == Type.MESSAGE) {
-      builder.setField(fieldDescriptor, ((Message.Builder)fieldValue).build());
+
+    builder.clearField(fieldDescriptor);
+
+    if (fieldDescriptor.isRepeated()) {
+      for (Object b : ((ArrayList<?>)fieldValue)) {
+        if (fieldDescriptor.getType() == Type.MESSAGE) {
+          builder.addRepeatedField(fieldDescriptor, ((Message.Builder)b).build());
+        } else {
+          builder.addRepeatedField(fieldDescriptor, b);
+        }
+      }
     } else {
-      builder.setField(fieldDescriptor, fieldValue);
+      if (fieldDescriptor.getType() == Type.MESSAGE) {
+        builder.setField(fieldDescriptor, ((Message.Builder)fieldValue).build());
+      } else {
+        builder.setField(fieldDescriptor, fieldValue);
+      }
     }
     return builder;
   }
@@ -178,7 +193,7 @@ public final class ProtobufStructObjectInspector extends SettableStructObjectIns
     if (data == null) {
       return null;
     }
-    Message.Builder m = (Message.Builder) data;
+    MessageOrBuilder m = (MessageOrBuilder) data;
     ProtobufStructField psf = (ProtobufStructField) structField;
     FieldDescriptor fieldDescriptor = psf.getFieldDescriptor();
     Object result = m.getField(fieldDescriptor);
